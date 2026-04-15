@@ -1,0 +1,53 @@
+name: Deploy Backend to EC2
+
+on:
+push:
+branches:
+- main
+
+workflow_dispatch:
+inputs:
+action:
+description: "Choose action"
+required: true
+default: "deploy"
+type: choice
+options:
+- deploy
+- rollback
+
+  branch:
+    description: "Branch to deploy"
+    required: false
+    default: "main"
+
+jobs:
+deploy:
+runs-on: ubuntu-latest
+
+steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
+
+  - name: Deploy or Rollback via SSH
+    uses: appleboy/ssh-action@v1.0.3
+    with:
+      host: ${{ secrets.EC2_HOST }}
+      username: ${{ secrets.EC2_USER }}
+      key: ${{ secrets.EC2_SSH_KEY }}
+      script: |
+        cd ${{ secrets.EC2_PATH }}
+
+        if [ "${{ github.event.inputs.action }}" = "rollback" ]; then
+          echo "Rolling back to previous commit..."
+          git reset --hard HEAD~1
+        else
+          echo "Deploying latest code..."
+          git fetch origin
+          git checkout ${{ github.event.inputs.branch || 'main' }}
+          git pull origin ${{ github.event.inputs.branch || 'main' }}
+        fi
+
+        npm install
+
+        pm2 restart bingone || pm2 start src/index.js --name bingone
